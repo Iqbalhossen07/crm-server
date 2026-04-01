@@ -1,12 +1,14 @@
 const errorHandler = (err, req, res, next) => {
-  let error = { ...err };
-  error.message = err.message;
+  // ডেভেলপার কনসোলে লাল রঙে এরর প্রিন্ট হবে
+  console.log(err.stack.red || err.stack);
 
-  console.error(`❌ Error Log: ${err.stack}`);
+  // সরাসরি err থেকে statusCode এবং message নিন
+  const statusCode = err.statusCode || 500;
+  const message = err.message || "Server Error";
 
-  res.status(error.statusCode || 500).json({
+  res.status(statusCode).json({
     success: false,
-    error: error.message || "Server Error",
+    error: message, // ফ্রন্টএন্ড এই 'error' কি-টাই খুঁজবে
   });
 };
 

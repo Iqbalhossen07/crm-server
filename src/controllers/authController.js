@@ -89,3 +89,91 @@ exports.login = async (req, res, next) => {
     next(err);
   }
 };
+
+
+// @desc    Update User Profile
+// @route   PUT /api/auth/updateprofile
+// @access  Private
+
+// @desc    Get Current Logged in User Data
+// @route   GET /api/auth/me
+// @access  Private
+exports.getMe = async (req, res, next) => {
+  try {
+    // req.user আসবে আমাদের 'protect' মিডলওয়্যার থেকে
+    const user = await User.findById(req.user.id);
+
+    res.status(200).json({
+      success: true,
+      data: user
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+exports.updateProfile = async (req, res, next) => {
+  try {
+    // ১. ইউজার খুঁজে বের করা
+    const user = await User.findById(req.user.id).select("+password");
+
+    if (!user) {
+      // এখানে next না দিয়ে সরাসরি রেসপন্স দিলে 'next is not a function' এরর আসবে না
+      return res.status(404).json({ success: false, error: "User not found" });
+    }
+
+    // ২. ডাটা আপডেট (যদি বডিতে থাকে তবেই আপডেট হবে)
+    if (req.body.name) user.name = req.body.name;
+    if (req.body.email) user.email = req.body.email;
+
+    // ৩. ইমেজ আপডেট
+    if (req.file) {
+      user.image = req.file.path;
+    }
+
+    // ৪. পাসওয়ার্ড আপডেট লজিক (নিখুঁত হ্যান্ডলিং)
+    // ইউজার যদি নতুন পাসওয়ার্ড ফিল্ডে কিছু লিখে তবেই এটি কাজ করবে
+    if (req.body.newPassword && req.body.newPassword.trim() !== "") {
+      if (!req.body.oldPassword) {
+        return res.status(400).json({
+          success: false,
+          error: "Current password is required to set a new one",
+        });
+      }
+
+      const isMatch = await bcrypt.compare(req.body.oldPassword, user.password);
+      if (!isMatch) {
+        return res.status(401).json({
+          success: false,
+          error: "Current password is incorrect",
+        });
+      }
+
+      user.password = req.body.newPassword;
+    }
+
+    // ৫. সেভ করা (কোনো ডাটা চেঞ্জ না করলেও এটি কাজ করবে)
+    await user.save();
+
+    // ৬. সাকসেস রেসপন্স
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      data: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        image: user.image,
+      },
+    });
+  } catch (err) {
+    console.error("Update Profile Error:", err);
+    // যদি next কাজ না করে, তবে সরাসরি এরর রেসপন্স পাঠিয়ে দিন
+    if (typeof next !== "function") {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+    next(err);
+  }
+};
