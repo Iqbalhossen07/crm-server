@@ -1,0 +1,37 @@
+const express = require("express");
+const dotenv = require("dotenv");
+const cors = require("cors");
+const connectDB = require("./src/config/db");
+const errorHandler = require("./src/middlewares/errorMiddleware");
+
+// ১. কনফিগ লোড
+dotenv.config();
+
+// ২. ডাটাবেস কানেক্ট
+connectDB();
+
+const app = express();
+
+// ৩. কোর মিডলওয়্যার
+app.use(cors());
+app.use(express.json());
+
+// ৪. বেসিক চেক
+app.get("/", (req, res) => {
+  res.send("CRM API is running...");
+});
+
+// ৫. এপিআই রাউটস লিঙ্ক করা
+// এখানে আমরা /api/auth প্রিফিক্স ব্যবহার করছি
+app.use("/api/auth", require("./src/routes/authRoutes"));
+
+// ৬. গ্লোবাল এরর হ্যান্ডলার (সবার নিচে)
+app.use(errorHandler);
+
+// ৭. সার্ভার পোর্ট সেটআপ
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(
+    `🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`,
+  );
+});
