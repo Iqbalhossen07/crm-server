@@ -1,5 +1,6 @@
 const Project = require("../../models/admin/Project");
 const Job = require("../../models/admin/Job");
+const Payment = require("../../models/admin/Payment");
 const ErrorResponse = require("../../utils/errorResponse");
 
 // @desc    Add New Project
@@ -109,11 +110,50 @@ exports.deleteProject = async (req, res, next) => {
 // @route   GET /api/admin/projects/:id
 exports.getSingleProject = async (req, res, next) => {
   try {
-    const project = await Project.findById(req.params.id).populate("client_id", "name");
+    const projectId = req.params.id;
+
+    // ১. প্রজেক্ট ডিটেইলস এবং ক্লায়েন্টের নাম আনা
+    const project = await Project.findById(projectId).populate(
+      "client_id",
+      "name image",
+    );
     if (!project) {
       return next(new ErrorResponse("Project not found", 404));
     }
-    res.status(200).json({ success: true, data: project });
+
+    // ২. এই প্রজেক্টের সব জব (Tasks) আনা
+    const jobs = await Job.find({ project_id: projectId }).sort("-created_at");
+
+    // ৩. এই প্রজেক্টের সব পেমেন্ট হিস্টোরি আনা
+    const payments = await Payment.find({ project_id: projectId })
+      .populate("job_id", "job_name")
+      .sort("-created_at");
+
+    // ৪. 🎯 রিয়েল-টাইম ফিন্যান্সিয়াল সামারি (Jobs থেকে ক্যালকুলেট করা)
+    let calc_total_budget = 0;
+    let calc_paid_amount = 0;
+    let calc_due_amount = 0;
+
+    jobs.forEach((job) => {
+      calc_total_budget += Number(job.job_budget || 0);
+      calc_paid_amount += Number(job.paid_budget || 0);
+      calc_due_amount += Number(job.due_budget || 0);
+    });
+
+    // ৫. ফ্রন্টএন্ডে একবারে সব ডাটা পাঠানো
+    res.status(200).json({
+      success: true,
+      data: {
+        project_info: project,
+        stats: {
+          calc_total_budget,
+          calc_paid_amount,
+          calc_due_amount,
+        },
+        jobs, // এইটাই Task Assignments হিসেবে ফ্রন্টএন্ডে দেখাবো
+        payments, // Payment History
+      },
+    });
   } catch (err) {
     next(err);
   }
