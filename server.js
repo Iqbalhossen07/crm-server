@@ -24,8 +24,16 @@ app.get("/", (req, res) => {
 // ৫. এপিআই রাউটস লিঙ্ক করা
 // এখানে আমরা /api/auth প্রিফিক্স ব্যবহার করছি
 app.use("/api/auth", require("./src/routes/authRoutes"));
+// Routes ইমপোর্ট
+const clientRoutes = require("./src/routes/admin/clientRoutes");
+const projectRoutes = require("./src/routes/admin/projectRoutes");
 
-// ৬. গ্লোবাল এরর হ্যান্ডলার (সবার নিচে)
+
+
+
+// Routes ব্যবহার করা
+app.use("/api/admin/clients", clientRoutes);
+app.use("/api/admin/projects", projectRoutes);
 app.use(errorHandler);
 
 // ৭. সার্ভার পোর্ট সেটআপ
