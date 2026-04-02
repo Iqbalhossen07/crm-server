@@ -27,13 +27,19 @@ app.use("/api/auth", require("./src/routes/authRoutes"));
 // Routes ইমপোর্ট
 const clientRoutes = require("./src/routes/admin/clientRoutes");
 const projectRoutes = require("./src/routes/admin/projectRoutes");
-
+const developerRoutes = require("./src/routes/admin/developerRoutes");
+const jobRoutes = require("./src/routes/admin/jobRoutes");
 
 
 
 // Routes ব্যবহার করা
 app.use("/api/admin/clients", clientRoutes);
 app.use("/api/admin/projects", projectRoutes);
+app.use("/api/admin/developers", developerRoutes);
+app.use("/api/admin/jobs", jobRoutes);
+
+
+
 app.use(errorHandler);
 
 // ৭. সার্ভার পোর্ট সেটআপ
