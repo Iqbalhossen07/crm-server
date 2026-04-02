@@ -23,7 +23,7 @@ const jobSchema = new mongoose.Schema(
     developer_paid: { type: Number, default: 0 },
     developer_due: { type: Number, default: 0 },
     is_free: { type: String, enum: ["0", "1"], default: "0" },
-    payment_status: { type: String, default: "Pending" },
+    payment_status: { type: String, default: "Incompleted" },
     job_status: { type: String, default: "In Progress" },
     start_time: { type: Date },
     estimate_finish_time: { type: Date },

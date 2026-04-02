@@ -5,6 +5,7 @@ const {
   deleteClient,
   getSingleClient,
   updateClient,
+  getClientOverview,
 } = require("../../controllers/admin/clientController");
 const { protect } = require("../../middlewares/authMiddleware");
 const { upload } = require("../../utils/cloudinary");
@@ -26,6 +27,8 @@ router
 
 // ২. স্পেসিফিক ক্লায়েন্ট রুট (আইডি দিয়ে দেখা, আপডেট এবং ডিলিট)
 // পাথ: /api/admin/clients/:id
+
+router.get("/:id/overview", getClientOverview);
 router
   .route("/:id")
   .get(protect, getSingleClient) // এডিট পেইজে ডাটা লোড করার জন্য

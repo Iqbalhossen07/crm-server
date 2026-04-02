@@ -1,6 +1,9 @@
 const Client = require("../../models/admin/Client");
+const Project = require("../../models/admin/Project");
+const Payment = require("../../models/admin/Payment");
 const User = require("../../models/User");
 const ErrorResponse = require("../../utils/errorResponse");
+const Job = require("../../models/admin/Job");
 
 // @desc    Create new Client and User Account
 // @route   POST /api/admin/clients
@@ -54,19 +57,53 @@ exports.addClient = async (req, res, next) => {
   }
 };
 
-// @desc    Get All Clients
+
 // @route   GET /api/admin/clients
 // @access  Private (Admin Only)
 exports.getClients = async (req, res, next) => {
   try {
-    const clients = await Client.find().sort("-created_at");
-    res
-      .status(200)
-      .json({ success: true, count: clients.length, data: clients });
+    // ১. সব ক্লায়েন্ট লিস্ট আনা
+    const clients = await Client.find().sort("-created_at").lean();
+
+    // ২. প্রত্যেক ক্লায়েন্টের জন্য জব টেবিল থেকে হিসাব বের করা
+    const clientsWithStats = await Promise.all(
+      clients.map(async (client) => {
+        // এই ক্লায়েন্টের আন্ডারে যতগুলো জব (Task) আছে সব আনা
+        const jobs = await Job.find({ client_id: client._id });
+
+        let total_bill = 0;
+        let total_paid = 0;
+        let total_due = 0;
+
+        // ৩. লুপ চালিয়ে জব থেকে হিসাব বের করা
+        jobs.forEach((job) => {
+          total_bill += Number(job.job_budget || 0);
+          total_paid += Number(job.paid_budget || 0);
+          total_due += Number(job.due_budget || 0);
+        });
+
+        // ক্লায়েন্ট ডাটার সাথে হিসাবগুলো যোগ করে রিটার্ন করা
+        return {
+          ...client,
+          total_bill,
+          total_paid,
+          total_due,
+          total_projects_count: jobs.length, // ঐচ্ছিক: কয়টি টাস্ক আছে তাও দেখতে পারবেন
+        };
+      }),
+    );
+
+    res.status(200).json({
+      success: true,
+      count: clientsWithStats.length,
+      data: clientsWithStats,
+    });
   } catch (err) {
+    console.error("Get Clients Error:", err);
     next(err);
   }
 };
+
 
 
 // @desc    Delete Client and associated User
@@ -110,6 +147,87 @@ exports.getSingleClient = async (req, res, next) => {
   }
 };
 
+
+// @desc    Get Client Overview (Details, Stats, Projects, Payments)
+// @route   GET /api/admin/clients/:id/overview
+// @access  Private (Admin Only)
+exports.getClientOverview = async (req, res, next) => {
+  try {
+    const clientId = req.params.id;
+
+    // ১. ক্লায়েন্টের বেসিক ডাটা
+    const client = await Client.findById(clientId).lean();
+    if (!client) return next(new ErrorResponse("Client not found", 404));
+
+    // ২. প্রজেক্ট এবং পেমেন্ট আনা
+    const rawProjects = await Project.find({ client_id: clientId })
+      .sort("-created_at")
+      .lean();
+    const payments = await Payment.find({ client_id: clientId })
+      .populate("project_id", "project_name")
+      .populate("job_id", "job_name")
+      .sort("-created_at");
+
+    // ৩. 🎯 সব জব নিয়ে আসা
+    const allJobs = await Job.find({ client_id: clientId });
+
+    let total_bill = 0;
+    let total_paid = 0;
+    let total_due = 0;
+
+    // ৪. ক্লায়েন্টের টোটাল হিসাব
+    allJobs.forEach((job) => {
+      total_bill += Number(job.job_budget || 0);
+      total_paid += Number(job.paid_budget || 0);
+      total_due += Number(job.due_budget || 0);
+    });
+
+    // ৫. 🎯 FIX: প্রত্যেকটা প্রজেক্টের আলাদা হিসাব বের করা
+    const projectsWithStats = rawProjects.map((proj) => {
+      // এই নির্দিষ্ট প্রজেক্টের জবগুলো ফিল্টার করা
+      const projJobs = allJobs.filter(
+        (job) => String(job.project_id) === String(proj._id),
+      );
+
+      let p_budget = 0;
+      let p_paid = 0;
+      let p_due = 0;
+
+      projJobs.forEach((job) => {
+        p_budget += Number(job.job_budget || 0);
+        p_paid += Number(job.paid_budget || 0);
+        p_due += Number(job.due_budget || 0);
+      });
+
+      return {
+        ...proj,
+        project_budget: p_budget,
+        paid_budget: p_paid,
+        due_budget: p_due,
+      };
+    });
+
+    // ৬. ডাটা পাঠানো
+    res.status(200).json({
+      success: true,
+      data: {
+        client_info: client,
+        stats: {
+          total_bill,
+          total_paid,
+          total_due,
+          total_projects: rawProjects.length,
+        },
+        projects: projectsWithStats, // 🎯 আপডেট করা প্রজেক্ট লিস্ট
+        payments,
+      },
+    });
+  } catch (err) {
+    console.error("Client Overview Error:", err);
+    next(err);
+  }
+};
+
 // @desc    Update Client
 // @route   PUT /api/admin/clients/:id
 exports.updateClient = async (req, res, next) => {
@@ -149,3 +267,5 @@ exports.updateClient = async (req, res, next) => {
     next(err);
   }
 };
+
+
