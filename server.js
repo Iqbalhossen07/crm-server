@@ -29,7 +29,8 @@ const clientRoutes = require("./src/routes/admin/clientRoutes");
 const projectRoutes = require("./src/routes/admin/projectRoutes");
 const developerRoutes = require("./src/routes/admin/developerRoutes");
 const jobRoutes = require("./src/routes/admin/jobRoutes");
-
+// পেমেন্ট রাউট ইম্পোর্ট
+const paymentRoutes = require("./src/routes/admin/paymentRoutes");
 
 
 // Routes ব্যবহার করা
@@ -37,6 +38,7 @@ app.use("/api/admin/clients", clientRoutes);
 app.use("/api/admin/projects", projectRoutes);
 app.use("/api/admin/developers", developerRoutes);
 app.use("/api/admin/jobs", jobRoutes);
+app.use("/api/admin/payments", paymentRoutes);
 
 
 

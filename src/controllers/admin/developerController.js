@@ -1,6 +1,8 @@
 const User = require("../../models/User");
 const Developer = require("../../models/admin/Developer");
 const ErrorResponse = require("../../utils/errorResponse");
+const Job = require("../../models/admin/Job");
+const DeveloperPayment = require("../../models/admin/DeveloperPayment");
 
 // @desc    Add New Developer
 // @route   POST /api/admin/developers
@@ -53,15 +55,45 @@ exports.addDeveloper = async (req, res, next) => {
   }
 };
 
-// @desc    Get All Developers
+// @desc    Get All Developers with Task & Payment Stats
 // @route   GET /api/admin/developers
 exports.getDevelopers = async (req, res, next) => {
   try {
-    const developers = await Developer.find().sort("-created_at");
+    // ১. সব ডেভেলপার আনা
+    const developers = await Developer.find().sort("-created_at").lean();
+
+    // ২. প্রতিটি ডেভেলপারের জন্য জবের ডাটা ক্যালকুলেট করা
+    const developersWithStats = await Promise.all(
+      developers.map(async (dev) => {
+        const stats = await Job.aggregate([
+          { $match: { developer_id: dev._id } },
+          {
+            $group: {
+              _id: null,
+              totalTasks: { $sum: 1 },
+              totalEarned: { $sum: "$developer_budget" },
+              totalPaid: { $sum: "$developer_paid" },
+              totalDue: { $sum: "$developer_due" },
+            },
+          },
+        ]);
+
+        return {
+          ...dev,
+          stats: stats[0] || {
+            totalTasks: 0,
+            totalEarned: 0,
+            totalPaid: 0,
+            totalDue: 0,
+          },
+        };
+      })
+    );
+
     res.status(200).json({
       success: true,
-      count: developers.length,
-      data: developers,
+      count: developersWithStats.length,
+      data: developersWithStats,
     });
   } catch (err) {
     next(err);
@@ -100,10 +132,48 @@ exports.deleteDeveloper = async (req, res, next) => {
 // @route   GET /api/admin/developers/:id
 exports.getSingleDeveloper = async (req, res, next) => {
   try {
-    const developer = await Developer.findById(req.params.id).populate("user_id", "image role");
-    if (!developer) return next(new ErrorResponse("Developer not found", 404));
-    
-    res.status(200).json({ success: true, data: developer });
+    const devId = req.params.id;
+
+    // ১. ডেভেলপারের বেসিক ইনফো
+    const developer = await Developer.findById(devId).lean();
+    if (!developer)
+      return res
+        .status(404)
+        .json({ success: false, error: "Developer not found" });
+
+    // ২. ডেভেলপারের সব জব (Project নাম সহ)
+    const jobs = await Job.find({ developer_id: devId })
+      .populate("project_id", "project_name")
+      .sort("-createdAt")
+      .lean();
+
+    // ৩. পেমেন্ট হিস্টোরি (Job নাম সহ)
+    const payments = await DeveloperPayment.find({ developer_id: devId })
+      .populate("job_id", "job_name")
+      .sort("-createdAt")
+      .lean();
+
+    // ৪. স্ট্যাটস ক্যালকুলেশন
+    const stats = jobs.reduce(
+      (acc, job) => {
+        acc.total_tasks += 1;
+        acc.total_budget += Number(job.developer_budget || 0);
+        acc.total_paid += Number(job.developer_paid || 0);
+        acc.total_due += Number(job.developer_due || 0);
+        return acc;
+      },
+      { total_tasks: 0, total_budget: 0, total_paid: 0, total_due: 0 },
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        developer,
+        stats,
+        jobs,
+        payments,
+      },
+    });
   } catch (err) {
     next(err);
   }

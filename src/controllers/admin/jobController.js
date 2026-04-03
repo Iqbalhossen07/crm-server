@@ -4,6 +4,54 @@ const Payment = require("../../models/admin/Payment");
 const DeveloperPayment = require("../../models/admin/DeveloperPayment");
 const mongoose = require("mongoose");
 
+
+
+// @desc    সব জব অথবা প্রজেক্ট অনুযায়ী জব দেখা
+// @route   GET /api/admin/jobs?project_id=ID
+exports.getJobs = async (req, res, next) => {
+  try {
+    let query;
+    // যদি URL-এ project_id থাকে
+    if (req.query.project_id) {
+      query = Job.find({ project_id: req.query.project_id });
+    } else {
+      // না থাকলে সব জব
+      query = Job.find();
+    }
+
+    // পপুলেট করে ডাটা আনা (প্রজেক্ট ও ডেভেলপার ডিটেইলস সহ)
+    const jobs = await query
+      .populate("project_id", "project_name")
+      .populate("developer_id", "name")
+      .sort("-created_at");
+
+    res.status(200).json({
+      success: true,
+      count: jobs.length,
+      data: jobs,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    ড্রপডাউনের জন্য সব প্রজেক্টের লিস্ট (নাম ও ক্লায়েন্ট সহ)
+// @route   GET /api/admin/jobs/projects-list
+exports.getProjectsList = async (req, res, next) => {
+  try {
+    const projects = await Project.find()
+      .select("project_name client_id")
+      .populate("client_id", "name email"); // ক্লায়েন্টের নাম ও ইমেইল সহ
+
+    res.status(200).json({
+      success: true,
+      data: projects,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.addJob = async (req, res) => {
   try {
     const {
@@ -91,54 +139,6 @@ exports.addJob = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
-
-// @desc    সব জব অথবা প্রজেক্ট অনুযায়ী জব দেখা
-// @route   GET /api/admin/jobs?project_id=ID
-exports.getJobs = async (req, res, next) => {
-  try {
-    let query;
-    // যদি URL-এ project_id থাকে
-    if (req.query.project_id) {
-      query = Job.find({ project_id: req.query.project_id });
-    } else {
-      // না থাকলে সব জব
-      query = Job.find();
-    }
-
-    // পপুলেট করে ডাটা আনা (প্রজেক্ট ও ডেভেলপার ডিটেইলস সহ)
-    const jobs = await query
-      .populate("project_id", "project_name")
-      .populate("developer_id", "name")
-      .sort("-created_at");
-
-    res.status(200).json({
-      success: true,
-      count: jobs.length,
-      data: jobs,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// @desc    ড্রপডাউনের জন্য সব প্রজেক্টের লিস্ট (নাম ও ক্লায়েন্ট সহ)
-// @route   GET /api/admin/jobs/projects-list
-exports.getProjectsList = async (req, res, next) => {
-  try {
-    const projects = await Project.find()
-      .select("project_name client_id")
-      .populate("client_id", "name email"); // ক্লায়েন্টের নাম ও ইমেইল সহ
-
-    res.status(200).json({
-      success: true,
-      data: projects,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// ... আগের ইমপোর্টগুলো ঠিক আছে ...
 
 // @desc    Update Job
 // @route   PUT /api/admin/jobs/:id
@@ -261,14 +261,36 @@ exports.updateJob = async (req, res) => {
 };
 
 // @desc    Get Single Job (Edit পেজে ডাটা লোড করার জন্য এটি লাগবেই)
+// @desc    Get Single Job (with client and developer payments)
+// @route   GET /api/admin/jobs/:id
 exports.getJobById = async (req, res) => {
   try {
-    const job = await Job.findById(req.params.id)
+    const jobId = req.params.id;
+
+    // ১. জবের ডিটেইলস আনা
+    const job = await Job.findById(jobId)
       .populate("project_id", "project_name")
-      .populate("developer_id", "name");
-    if (!job)
+      .populate("developer_id", "name")
+    .populate("client_id", "name");
+
+    if (!job) {
       return res.status(404).json({ success: false, error: "Job not found" });
-    res.status(200).json({ success: true, data: job });
+    }
+
+    // ২. এই জবের ক্লায়েন্ট পেমেন্ট হিস্টোরি আনা
+    const clientPayments = await Payment.find({ job_id: jobId }).sort("-createdAt");
+
+    // ৩. এই জবের ডেভেলপার পেমেন্ট হিস্টোরি আনা
+    const developerPayments = await DeveloperPayment.find({ job_id: jobId }).sort("-createdAt");
+
+    res.status(200).json({ 
+      success: true, 
+      data: {
+        job,
+        client_payments: clientPayments,
+        developer_payments: developerPayments
+      } 
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -304,3 +326,5 @@ exports.deleteJob = async (req, res, next) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+
